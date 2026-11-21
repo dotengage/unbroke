@@ -1,8 +1,8 @@
 // Minimal offline shell: network-first for navigations, cache-first for built assets.
-const CACHE = 'unbroke-v1';
+const CACHE = 'unbroke-v2';
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './icon.svg', './manifest.webmanifest'])).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './icon.svg', './icon-light.svg', './manifest.webmanifest'])).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

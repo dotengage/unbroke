@@ -27,6 +27,51 @@ export function filterForExport(txns: Txn[], s: ExportScope): Txn[] {
 
 const fileBase = (s: ExportScope) => `Unbroke ${s.start} to ${s.end}`;
 
+export interface ExportFile {
+  blob: Blob;
+  name: string;
+}
+
+/** Loads the export libraries ahead of time so tapping Download stays inside the user's tap (iOS needs that to share). */
+export function preloadExportLibs() {
+  void import('jspdf');
+  void import('jspdf-autotable');
+  void import('xlsx');
+}
+
+const isTouch = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+
+/**
+ * Hands the file to the user. Phones get the system share sheet ("Save to Files", WhatsApp, Drive…),
+ * which is the only reliable way to save from an installed iPhone web app. Desktops get a normal download.
+ * Returns 'needs-tap' when the browser wants a fresh tap before it will open the share sheet.
+ */
+export async function deliverFile(f: ExportFile): Promise<'shared' | 'downloaded' | 'cancelled' | 'needs-tap'> {
+  const file = new File([f.blob], f.name, { type: f.blob.type });
+  const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+  if (isTouch() && nav.share && nav.canShare?.({ files: [file] })) {
+    try {
+      await nav.share({ files: [file], title: f.name });
+      return 'shared';
+    } catch (e) {
+      const name = (e as DOMException)?.name;
+      if (name === 'AbortError') return 'cancelled';
+      if (name === 'NotAllowedError') return 'needs-tap';
+      // anything else: fall through to a plain download
+    }
+  }
+  const url = URL.createObjectURL(f.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = f.name;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return 'downloaded';
+}
+
 // jsPDF's built-in fonts have no ₹ glyph, so PDFs use the ISO-style prefix.
 function pdfMoney(n: number) {
   const c = getCurrency();
@@ -46,7 +91,7 @@ function monthly(txns: Txn[]) {
   return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-export async function exportXlsx(txns: Txn[], s: ExportScope) {
+export async function exportXlsx(txns: Txn[], s: ExportScope): Promise<ExportFile> {
   const XLSX = await import('xlsx');
   const p: Period = { preset: 'custom', start: s.start, end: s.end, label: '' };
   const st = stats(txns, p);
@@ -91,10 +136,11 @@ export async function exportXlsx(txns: Txn[], s: ExportScope) {
   ws4['!cols'] = [{ wch: 18 }, { wch: 12 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(wb, ws4, 'By month');
 
-  XLSX.writeFile(wb, `${fileBase(s)}.xlsx`);
+  const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+  return { blob: new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), name: `${fileBase(s)}.xlsx` };
 }
 
-export async function exportPdf(txns: Txn[], s: ExportScope, opts: { transactions: boolean } = { transactions: true }) {
+export async function exportPdf(txns: Txn[], s: ExportScope, opts: { transactions: boolean } = { transactions: true }): Promise<ExportFile> {
   const [{ jsPDF }, autoTableMod] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
   // the package ships UMD as "main"; depending on interop the function sits at a different depth
   const m = autoTableMod as unknown as { default?: unknown; autoTable?: unknown };
@@ -212,5 +258,5 @@ export async function exportPdf(txns: Txn[], s: ExportScope, opts: { transaction
     doc.setTextColor(...grey);
     doc.text(`Page ${i} of ${pages}`, W - M, doc.internal.pageSize.getHeight() - 20, { align: 'right' });
   }
-  doc.save(`${fileBase(s)}.pdf`);
+  return { blob: doc.output('blob'), name: `${fileBase(s)}.pdf` };
 }

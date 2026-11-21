@@ -1,5 +1,5 @@
 import { animate, AnimatePresence, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from 'framer-motion';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { money } from '../lib/format';
 import { dismissToast, useStore } from '../lib/store';
@@ -177,5 +177,15 @@ export function Reveal({ children, delay = 0, className }: { children: ReactNode
     <motion.div className={className} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay }}>
       {children}
     </motion.div>
+  );
+}
+
+/** App mark that follows the theme: dark tile on light backgrounds, white tile on dark ones. */
+export function Logo({ size, className, style }: { size?: number; className?: string; style?: CSSProperties }) {
+  return (
+    <>
+      <img src="./icon.svg" alt="" width={size} height={size} className={`logo-on-light ${className || ''}`} style={style} />
+      <img src="./icon-light.svg" alt="" width={size} height={size} className={`logo-on-dark ${className || ''}`} style={style} />
+    </>
   );
 }

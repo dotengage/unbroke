@@ -130,9 +130,12 @@ a { color: inherit; }
 input:focus, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
 
 /* ───────── Layout ───────── */
-.app { min-height: 100%; display: flex; }
+.app { min-height: 100%; min-height: 100vh; min-height: 100dvh; display: flex; }
 .sidebar { display: none; }
 .main { flex: 1; min-width: 0; padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 24px); }
+/* iOS installed apps misplace bottom-fixed bars when the page is shorter than the screen
+   (e.g. the More tab): keep every page at least one screen tall */
+@media (max-width: 899px) { .main { min-height: 100vh; min-height: 100lvh; } }
 .page { max-width: 640px; margin: 0 auto; padding: calc(var(--safe-t) + 12px) 16px 24px; }
 .page.wide { max-width: 1120px; }
 
@@ -162,6 +165,13 @@ input:focus, input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 20px; font: 700 20px var(--font-display); letter-spacing: -0.02em; }
 .brand img { width: 30px; height: 30px; border-radius: 8px; }
+.logo-on-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .logo-on-dark { display: inline-block; }
+  :root:not([data-theme='light']) .logo-on-light { display: none; }
+}
+:root[data-theme='dark'] .logo-on-dark { display: inline-block; }
+:root[data-theme='dark'] .logo-on-light { display: none; }
 .nav-item {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; color: var(--text-2);
   font-weight: 550; transition: background 0.15s, color 0.15s; text-align: left; width: 100%;
@@ -174,7 +184,7 @@ input:focus, input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 /* Tab bar */
 .tabbar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; height: calc(var(--tabbar-h) + var(--safe-b));
+  position: fixed; left: 0; right: 0; bottom: 0; transform: translateZ(0); z-index: 40; height: calc(var(--tabbar-h) + var(--safe-b));
   padding-bottom: var(--safe-b); display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
   background: var(--chrome); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-top: 1px solid var(--line);

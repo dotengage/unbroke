@@ -3,7 +3,7 @@ import { BarChart3, Home as HomeIcon, Landmark, MoreHorizontal, Plus, List, Cale
 import { useEffect, type ReactNode } from 'react';
 import { AddExpenseSheet } from './components/AddExpense';
 import { ExportSheet } from './components/ExportSheet';
-import { ToastHost } from './components/ui';
+import { Logo, ToastHost } from './components/ui';
 import { go, openAdd, useRoute } from './lib/hooks';
 import { startSync, useStore } from './lib/store';
 import { Accounts } from './screens/Accounts';
@@ -87,7 +87,7 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <img src="./icon.svg" alt="" /> Unbroke
+          <Logo /> Unbroke
         </div>
         <button className="btn primary block add-btn" onClick={() => openAdd()}>
           <Plus size={18} /> New expense

@@ -1,8 +1,8 @@
 import { FileSpreadsheet, FileText, Loader2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { sum } from '../lib/analytics';
 import { addMonths, endOfMonth, startOfMonth, todayKey } from '../lib/dates';
-import { exportPdf, exportXlsx, filterForExport, type ExportScope } from '../lib/export';
+import { deliverFile, exportPdf, exportXlsx, filterForExport, preloadExportLibs, type ExportFile, type ExportScope } from '../lib/export';
 import { money } from '../lib/format';
 import { closeExport, useData, useUI } from '../lib/hooks';
 import { toast } from '../lib/store';
@@ -33,15 +33,33 @@ function ExportForm({ initial }: { initial?: ExportScope }) {
     ['All time', () => ({ ...scope, start: txns.reduce((m, x) => (x.date < m ? x.date : m), t), end: t, label: 'All time' })],
   ];
 
+  useEffect(() => preloadExportLibs(), []);
+
+  const finish = async (f: ExportFile) => {
+    const r = await deliverFile(f);
+    if (r === 'needs-tap') {
+      // the browser wants a fresh tap before opening the share sheet
+      toast(`${format === 'pdf' ? 'PDF' : 'Excel file'} is ready`, { duration: 15000, action: { label: 'Save', run: () => void finish(f) } });
+      return;
+    }
+    if (r === 'shared' || r === 'downloaded') {
+      toast(r === 'shared' ? 'Exported' : `${format === 'pdf' ? 'PDF' : 'Excel file'} downloaded`);
+      closeExport();
+    }
+  };
+
   const run = async () => {
     setBusy(true);
     try {
-      if (format === 'pdf') await exportPdf(list, scope, { transactions: withTx });
-      else await exportXlsx(list, scope);
-      toast(`${format === 'pdf' ? 'PDF' : 'Excel file'} downloaded`);
-      closeExport();
+      const f = format === 'pdf' ? await exportPdf(list, scope, { transactions: withTx }) : await exportXlsx(list, scope);
+      await finish(f);
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Export failed', { tone: 'error' });
+      const msg = e instanceof Error ? e.message : String(e);
+      // an old copy of the app asking for files a newer deploy replaced
+      if (/module script|dynamically imported|Failed to fetch/i.test(msg)) {
+        toast('Updating the app, please try again in a moment…');
+        setTimeout(() => location.reload(), 900);
+      } else toast(msg || 'Export failed', { tone: 'error' });
     } finally {
       setBusy(false);
     }

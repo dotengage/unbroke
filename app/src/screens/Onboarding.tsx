@@ -3,7 +3,7 @@ import { ArrowRight, Check, ChevronLeft, Copy, ExternalLink, Loader2, Sparkles }
 import { useState } from 'react';
 import code from '../../../apps-script/Code.gs?raw';
 import { connect, startDemo } from '../lib/store';
-import { spring } from '../components/ui';
+import { Logo, spring } from '../components/ui';
 
 // Set VITE_TEMPLATE_URL to your template sheet's ".../copy" link to enable one-click setup for friends.
 const TEMPLATE = (import.meta.env.VITE_TEMPLATE_URL as string | undefined) || '';
@@ -15,7 +15,9 @@ export function Onboarding() {
       <AnimatePresence mode="wait">
         {step === 'welcome' ? (
           <motion.div key="w" className="onb-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }} transition={spring} style={{ textAlign: 'center' }}>
-            <motion.img src="./icon.svg" alt="" width={96} height={96} style={{ borderRadius: 24, boxShadow: '0 20px 50px rgba(0,0,0,.25)' }} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', bounce: 0.3, duration: 0.7 }} />
+            <motion.div style={{ display: 'inline-flex' }} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', bounce: 0.3, duration: 0.7 }}>
+              <Logo size={96} style={{ borderRadius: 24, boxShadow: '0 20px 50px rgba(0,0,0,.25)' }} />
+            </motion.div>
             <h1 className="large-title" style={{ fontSize: 40, marginTop: 24 }}>Unbroke</h1>
             <p className="muted" style={{ fontSize: 17, maxWidth: 380, margin: '10px auto 32px' }}>Track every rupee, set budgets, and see where your money goes. Everything lives in your own Google Sheet.</p>
             <div className="stack" style={{ maxWidth: 340, margin: '0 auto' }}>
