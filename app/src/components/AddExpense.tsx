@@ -13,10 +13,29 @@ import { Sheet, spring } from './ui';
 
 const coarse = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
+/** Deletes an expense with an Undo toast. Shared by the header trash button and the form. */
+function deleteTxn(t: Txn) {
+  mutate([{ op: 'delete', table: 'Transactions', id: t.id }]);
+  closeAdd();
+  toast('Expense deleted', { action: { label: 'Undo', run: () => mutate([{ op: 'upsert', table: 'Transactions', row: t as unknown as Record<string, unknown> }]) } });
+}
+
 export function AddExpenseSheet() {
   const { add } = useUI();
+  const edit = add.edit;
   return (
-    <Sheet open={add.open} onClose={closeAdd} title={add.edit ? 'Edit expense' : 'New expense'}>
+    <Sheet
+      open={add.open}
+      onClose={closeAdd}
+      title={edit ? 'Edit expense' : 'New expense'}
+      right={
+        edit ? (
+          <button className="icon-btn" onClick={() => deleteTxn(edit)} aria-label="Delete expense" title="Delete" style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>
+            <Trash2 size={17} />
+          </button>
+        ) : undefined
+      }
+    >
       {add.open && <AddExpenseForm key={add.edit?.id || 'new'} edit={add.edit} />}
     </Sheet>
   );
@@ -123,13 +142,18 @@ function AddExpenseForm({ edit }: { edit?: Txn }) {
       });
   };
 
-  const del = () => {
-    if (!edit) return;
-    const copy = edit;
-    mutate([{ op: 'delete', table: 'Transactions', id: edit.id }]);
-    closeAdd();
-    toast('Expense deleted', { action: { label: 'Undo', run: () => mutate([{ op: 'upsert', table: 'Transactions', row: copy as unknown as Record<string, unknown> }]) } });
-  };
+  const del = () => edit && deleteTxn(edit);
+
+  const editActions = edit ? (
+    <div className="row" style={{ marginTop: 10, gap: 8 }}>
+      <button className="btn danger" style={{ flex: 1 }} onClick={() => del()}>
+        <Trash2 size={16} /> Delete
+      </button>
+      <button className="btn" style={{ flex: 1 }} onClick={() => duplicate()}>
+        Duplicate
+      </button>
+    </div>
+  ) : null;
 
   const duplicate = () => {
     if (!edit) return;
@@ -271,6 +295,9 @@ function AddExpenseForm({ edit }: { edit?: Txn }) {
 
       {edit?.source.startsWith('scheduled') && <div className="tiny faint" style={{ margin: '6px 2px' }}>Recorded automatically from a scheduled expense.</div>}
 
+      {/* on phones the keypad is pinned to the bottom, so the actions go above it */}
+      {useKeypad && editActions}
+
       {/* Keypad (touch) */}
       {useKeypad ? (
         <div className="keypad">
@@ -291,16 +318,8 @@ function AddExpenseForm({ edit }: { edit?: Txn }) {
         </button>
       )}
 
-      {edit && (
-        <div className="row" style={{ marginTop: 10, gap: 8 }}>
-          <button className="btn danger" style={{ flex: 1 }} onClick={del}>
-            <Trash2 size={16} /> Delete
-          </button>
-          <button className="btn" style={{ flex: 1 }} onClick={duplicate}>
-            Duplicate
-          </button>
-        </div>
-      )}
+      {/* on desktop the actions sit under Save */}
+      {!useKeypad && editActions}
     </div>
   );
 }
