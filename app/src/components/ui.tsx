@@ -180,12 +180,7 @@ export function Reveal({ children, delay = 0, className }: { children: ReactNode
   );
 }
 
-/** App mark that follows the theme: dark tile on light backgrounds, white tile on dark ones. */
+/** App mark. The dark tile is used everywhere in the app; only the phone home-screen icon is white. */
 export function Logo({ size, className, style }: { size?: number; className?: string; style?: CSSProperties }) {
-  return (
-    <>
-      <img src="./icon.svg" alt="" width={size} height={size} className={`logo-on-light ${className || ''}`} style={style} />
-      <img src="./icon-light.svg" alt="" width={size} height={size} className={`logo-on-dark ${className || ''}`} style={style} />
-    </>
-  );
+  return <img src="./icon.svg" alt="" width={size} height={size} className={className} style={style} />;
 }

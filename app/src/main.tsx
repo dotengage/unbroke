@@ -9,6 +9,9 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
+// Safari ignores user-scalable=no in the browser tab; block pinch-zoom gestures there too.
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+
 if (import.meta.env.PROD) {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));

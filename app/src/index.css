@@ -106,7 +106,11 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body, #root { height: 100%; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; touch-action: manipulation; } /* no double-tap zoom */
+/* iOS zooms into any text field under 16px when it gets focus: keep fields at 16px on touch screens */
+@media (pointer: coarse) {
+  input, select, textarea, .input, .quick input { font-size: 16px !important; }
+}
 body {
   margin: 0;
   background: var(--bg);
@@ -165,13 +169,6 @@ input:focus, input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 20px; font: 700 20px var(--font-display); letter-spacing: -0.02em; }
 .brand img { width: 30px; height: 30px; border-radius: 8px; }
-.logo-on-dark { display: none; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .logo-on-dark { display: inline-block; }
-  :root:not([data-theme='light']) .logo-on-light { display: none; }
-}
-:root[data-theme='dark'] .logo-on-dark { display: inline-block; }
-:root[data-theme='dark'] .logo-on-light { display: none; }
 .nav-item {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; color: var(--text-2);
   font-weight: 550; transition: background 0.15s, color 0.15s; text-align: left; width: 100%;
