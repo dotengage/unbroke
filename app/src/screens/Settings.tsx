@@ -1,5 +1,5 @@
-import { ChevronLeft, ExternalLink, LogOut, RefreshCw, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Check, ChevronLeft, Copy, ExternalLink, LogOut, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { Reveal, Segmented } from '../components/ui';
 import { back, go, useData } from '../lib/hooks';
 import { disconnect, discardPending, pull, setConnMeta, setSetting, setTheme, toast, useStore, type ThemePref } from '../lib/store';
@@ -14,6 +14,7 @@ export function Settings() {
   const error = useStore((s) => s.error);
   const { data, weekStart, txns, activeAccounts, defaultAccount } = useData();
   const [sheetUrl, setSheetUrl] = useState(conn?.mode === 'sheet' ? conn.sheetUrl || '' : '');
+  const [editingSheet, setEditingSheet] = useState(false);
 
   return (
     <div className="page">
@@ -73,17 +74,30 @@ export function Settings() {
                 </button>
               </div>
             )}
-            <label className="field">
-              <span>Sheet link (for the “Open sheet” shortcut)</span>
-              <div className="row" style={{ gap: 8 }}>
-                <input className="input" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" />
-                <button className="btn sm" onClick={() => { setConnMeta({ sheetUrl: sheetUrl.trim() || undefined }); toast('Saved'); }}>Save</button>
-              </div>
-            </label>
-            {conn.sheetUrl && <a className="btn" href={conn.sheetUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open sheet</a>}
+            <div className="field">
+              <span>Google Sheet</span>
+              {conn.sheetUrl && !editingSheet ? (
+                <SecretRow
+                  value={conn.sheetUrl}
+                  label="sheet link"
+                  extra={
+                    <>
+                      <a className="icon-btn" href={conn.sheetUrl} target="_blank" rel="noreferrer" aria-label="Open sheet" title="Open sheet"><ExternalLink size={15} /></a>
+                      <button className="icon-btn" onClick={() => { setSheetUrl(conn.sheetUrl || ''); setEditingSheet(true); }} aria-label="Change sheet link" title="Change"><Pencil size={15} /></button>
+                    </>
+                  }
+                />
+              ) : (
+                <div className="row" style={{ gap: 8 }}>
+                  <input className="input" autoFocus={editingSheet} value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder="Paste your sheet link (optional)" />
+                  <button className="btn sm" onClick={() => { setConnMeta({ sheetUrl: sheetUrl.trim() || undefined }); setEditingSheet(false); toast('Saved'); }}>Save</button>
+                </div>
+              )}
+            </div>
             <div className="field">
               <span>Web app URL</span>
-              <div className="code small" style={{ wordBreak: 'break-all', padding: '8px 10px' }}>{conn.url}</div>
+              <SecretRow value={conn.url} label="web app URL" />
+              <span style={{ fontWeight: 500 }}>To use the same data on another device, paste this URL there. Keep it private: anyone who has it can read and edit your sheet.</span>
             </div>
             <button className="btn danger" onClick={() => { if (confirm('Disconnect this device? Your sheet keeps all data.')) disconnect(); }}>
               <LogOut size={15} /> Disconnect
@@ -97,6 +111,48 @@ export function Settings() {
         )}
         <p className="tiny faint" style={{ textAlign: 'center', marginTop: 24 }}>Unbroke · your data lives in your own Google Sheet</p>
       </Reveal>
+    </div>
+  );
+}
+
+/** Shows only the start and end of a private link, e.g. "script.google.com/…••••c2E2", with a copy button. */
+function mask(url: string) {
+  try {
+    const u = new URL(url);
+    const tail = url.replace(/\/(exec|edit.*|copy)$/, '').slice(-4);
+    return `${u.host}/…••••••${tail}`;
+  } catch {
+    return '••••••••' + url.slice(-4);
+  }
+}
+
+function SecretRow({ value, label, extra }: { value: string; label: string; extra?: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // older browsers / insecure contexts
+      const t = document.createElement('textarea');
+      t.value = value;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      t.remove();
+    }
+    setCopied(true);
+    toast(`Copied ${label}`);
+    setTimeout(() => setCopied(false), 1800);
+  };
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <div className="input row num" style={{ flex: 1, minWidth: 0, color: 'var(--text-2)', letterSpacing: '0.01em', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', userSelect: 'none' }} aria-label={`${label} (hidden)`}>
+        {mask(value)}
+      </div>
+      {extra}
+      <button className="btn sm" onClick={copy} style={{ minWidth: 92 }} aria-label={`Copy ${label}`}>
+        {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copied' : 'Copy'}
+      </button>
     </div>
   );
 }
