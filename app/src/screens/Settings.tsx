@@ -1,4 +1,7 @@
-import { Check, ChevronLeft, Copy, ExternalLink, LogOut, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, Copy, ExternalLink, LogOut, Pencil, RefreshCw, Smartphone, Trash2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import scriptCode from '../../../apps-script/Code.gs?raw';
+import { spring } from '../components/ui';
 import { useState, type ReactNode } from 'react';
 import { Reveal, Segmented } from '../components/ui';
 import { back, go, useData } from '../lib/hooks';
@@ -109,6 +112,7 @@ export function Settings() {
             <button className="btn primary" onClick={disconnect}>Connect a Google Sheet</button>
           </div>
         )}
+        {conn?.mode === 'sheet' && <BackTapCard url={conn.url} api={data.api || 1} />}
         <p className="tiny faint" style={{ textAlign: 'center', marginTop: 24 }}>Unbroke · your data lives in your own Google Sheet</p>
       </Reveal>
     </div>
@@ -154,5 +158,73 @@ function SecretRow({ value, label, extra }: { value: string; label: string; extr
         {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copied' : 'Copy'}
       </button>
     </div>
+  );
+}
+
+/**
+ * Optional: lets iPhone users add expenses by double-tapping the back of the phone.
+ * Collapsed by default so it stays out of the way for everyone who doesn't use it.
+ */
+function BackTapCard({ url, api }: { url: string; api: number }) {
+  const [open, setOpen] = useState(false);
+  const ready = api >= 2;
+  const copyScript = async () => {
+    try {
+      await navigator.clipboard.writeText(scriptCode);
+      toast('Copied the latest script');
+    } catch {
+      toast('Couldn’t copy. Use apps-script/Code.gs from the repo instead.', { tone: 'error' });
+    }
+  };
+  return (
+    <>
+      <div className="section-title"><h2>Shortcuts</h2></div>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <button className="list-row" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          <span className="icon-tile sm" style={{ background: 'var(--fill-2)' }}><Smartphone size={16} /></span>
+          <div className="main-col">
+            <div className="title">Add with iPhone Back Tap</div>
+            <div className="meta">Optional · double-tap the back of your phone to log an expense</div>
+          </div>
+          <motion.span animate={{ rotate: open ? 180 : 0 }} transition={spring} style={{ display: 'flex' }}><ChevronDown size={18} className="faint" /></motion.span>
+        </button>
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={spring} style={{ overflow: 'hidden' }}>
+              <div className="stack" style={{ padding: '4px 16px 18px', gap: 14 }}>
+                <p className="small muted" style={{ margin: 0 }}>
+                  Double-tap, type or say something like <b>“swiggy 340 upi note team dinner”</b>, and it&rsquo;s saved straight to your sheet without opening the app. It understands the same things as quick add.
+                </p>
+                {!ready && (
+                  <div className="small" style={{ background: 'var(--warn-soft)', borderRadius: 12, padding: '10px 12px' }}>
+                    <b>First, update your sheet&rsquo;s script.</b> Copy the latest script, paste it over the old one in <b>Extensions › Apps Script</b>, then <b>Deploy › Manage deployments › Edit (pencil) › Version: New version › Deploy</b>. Your URL stays the same.
+                    <div><button className="btn sm" style={{ marginTop: 8 }} onClick={copyScript}><Copy size={14} /> Copy latest script</button></div>
+                  </div>
+                )}
+                <ol className="steps">
+                  <li><div>Open the <b>Shortcuts</b> app, tap <b>+</b>, and name it <b>Add expense</b>.</div></li>
+                  <li><div>Add <b>Ask for Input</b>. Prompt: <span className="code">What did you spend?</span>, type: Text.</div></li>
+                  <li>
+                    <div className="stack" style={{ gap: 8, minWidth: 0, flex: 1 }}>
+                      <div>Add <b>Get Contents of URL</b> and paste your web app URL:</div>
+                      <SecretRow value={url} label="web app URL" />
+                      <div>Tap the arrow on it: <b>Method</b> POST, <b>Request Body</b> JSON, then add three Text fields:</div>
+                      <div className="code small" style={{ padding: '8px 10px', lineHeight: 1.7 }}>
+                        action → quick<br />text → <i>Provided Input</i> (pick the variable)<br />format → text
+                      </div>
+                    </div>
+                  </li>
+                  <li><div>Add <b>Show Notification</b> and set its text to <b>Contents of URL</b>.</div></li>
+                  <li><div>On the phone: <b>Settings › Accessibility › Touch › Back Tap › Double Tap</b> › choose <b>Add expense</b>.</div></li>
+                </ol>
+                <p className="tiny faint" style={{ margin: 0 }}>
+                  {ready ? 'Your sheet is ready for this. ' : ''}You&rsquo;ll see a notification like “✓ Added ₹340 · Food & Dining · UPI”, and the expense shows up in the app within a few seconds. Expenses without an account go to your default account.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </>
   );
 }

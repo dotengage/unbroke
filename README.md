@@ -66,6 +66,12 @@ Each person's data stays in their own Drive. Nobody else's script can read it.
 
 > **Updating the script later:** paste the new `Code.gs`, then go to **Deploy › Manage deployments › Edit › Version: New version**. The URL stays the same.
 
+## Optional: add expenses with iPhone Back Tap
+
+Double-tap the back of the phone, type or dictate something like `swiggy 340 upi note team dinner`, and it's saved straight to the sheet without opening the app. Setup steps are in **Settings › Shortcuts › Add with iPhone Back Tap** inside the app. This needs script version 2 or later (the `quick` action), so sheets set up earlier must paste the latest `Code.gs` and choose **Deploy › Manage deployments › Edit › New version**.
+
+The script takes `POST {"action":"quick","text":"…","format":"text"}` and replies with one line such as `✓ Added ₹340 · Food & Dining · UPI`. Parsing works the same as in-app quick add (`app/src/lib/quickadd.ts`, mirrored by `parseQuick_` in `Code.gs`).
+
 ## Privacy note
 
 The web-app URL works like a password: anyone who has it can read and write that sheet. Keep it private. If it ever leaks, go to **Deploy › Manage deployments**, archive the old deployment, create a new one, and paste the new URL into the app.

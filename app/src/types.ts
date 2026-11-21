@@ -69,6 +69,7 @@ export interface Scheduled {
 
 export interface Snapshot {
   version: string;
+  api?: number; // backend script version (2+ supports the Back Tap shortcut)
   timeZone?: string;
   transactions: Txn[];
   categories: Category[];

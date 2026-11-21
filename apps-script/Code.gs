@@ -8,7 +8,7 @@
  * You can edit rows directly in the sheet; the app picks the change up within seconds.
  */
 
-var API_VERSION = 1;
+var API_VERSION = 2; // 2: adds the 'quick' action used by the iPhone Back Tap shortcut
 
 var SCHEMA = {
   Transactions: ['ID', 'Date', 'Time', 'Amount', 'Category', 'Account', 'Note', 'Receipt', 'Source', 'Created', 'Updated'],
@@ -68,14 +68,23 @@ function handle_(action, p) {
       case 'batch': out = batch_(p.ops || []); break;
       case 'upload': out = upload_(p); break;
       case 'runScheduled': runScheduled(); out = pull_(); break;
+      case 'quick': out = quickAdd_(p.text); break;
       default: throw new Error('Unknown action: ' + action);
     }
     out.ok = true;
     out.api = API_VERSION;
+    // Shortcuts can show a plain sentence directly in a notification
+    if (p && p.format === 'text') return text_(out.message || 'Done');
     return json_(out);
   } catch (err) {
-    return json_({ ok: false, error: String(err && err.message || err) });
+    var msg = String(err && err.message || err);
+    if (p && p.format === 'text') return text_('⚠️ ' + msg);
+    return json_({ ok: false, error: msg });
   }
+}
+
+function text_(s) {
+  return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.TEXT);
 }
 
 function json_(o) {
@@ -521,6 +530,238 @@ function clampDate_(y, m, d) {
   var first = new Date(y, m, 1);
   var last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   return new Date(first.getFullYear(), first.getMonth(), Math.min(d, last));
+}
+
+/* ───────────────────────── Quick add from text (iPhone Back Tap shortcut) ───────────────────────── */
+
+/**
+ * Adds one expense from a sentence such as "swiggy 340 upi yesterday 9pm note team dinner".
+ * Mirrors app/src/lib/quickadd.ts so the shortcut and the in-app quick add behave the same.
+ */
+function quickAdd_(text) {
+  text = String(text || '').trim();
+  if (!text) throw new Error('Say or type what you spent, e.g. "swiggy 340 upi"');
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss.getSheetByName('Transactions')) throw new Error('NOT_INITIALISED');
+  var tz = ss.getSpreadsheetTimeZone();
+  var cats = readTable_(ss, 'Categories', tz).filter(function (c) { return c.name && !c.archived; });
+  var accs = readTable_(ss, 'Accounts', tz).filter(function (a) { return a.name && !a.archived; });
+  var settings = {};
+  readTable_(ss, 'Settings', tz).forEach(function (r) { if (r.key) settings[r.key] = String(r.value); });
+  var today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  var nowTime = Utilities.formatDate(new Date(), tz, 'HH:mm');
+
+  var p = parseQuick_(text, cats, accs, today);
+  if (!p.amount) throw new Error('No amount found in "' + text + '". Try "chai 30".');
+
+  var defAcc = '';
+  var wanted = String(settings.defaultAccount || '').toLowerCase();
+  accs.forEach(function (a) { if (!defAcc && a.name.toLowerCase() === wanted) defAcc = a.name; });
+  if (!defAcc && accs.length) defAcc = accs[0].name;
+  var category = p.category || (cats.filter(function (c) { return c.name.toLowerCase() === 'others'; })[0] || {}).name || 'Others';
+  var account = p.account || defAcc;
+  var time = p.time || (p.date === today ? nowTime : '12:00');
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var tx = ss.getSheetByName('Transactions');
+    var cols = headerMap_(tx);
+    var row = new Array(tx.getLastColumn()).fill('');
+    var put = function (h, v) { if (cols[h] !== undefined) row[cols[h]] = v; };
+    put('ID', uid_());
+    put('Date', p.date);
+    put('Time', time);
+    put('Amount', p.amount);
+    put('Category', category);
+    put('Account', account);
+    put('Note', p.note);
+    put('Source', 'shortcut');
+    put('Created', new Date());
+    put('Updated', new Date());
+    tx.appendRow(row);
+    bump_();
+  } finally {
+    lock.releaseLock();
+  }
+
+  var when = p.date === today ? '' : ' · ' + Utilities.formatDate(new Date(p.date + 'T12:00:00'), tz, 'd MMM');
+  var amt = '₹' + Number(p.amount).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  if (String(settings.currency || 'INR') !== 'INR') amt = settings.currency + ' ' + Number(p.amount).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  return {
+    message: '✓ Added ' + amt + ' · ' + category + (account ? ' · ' + account : '') + when + (p.note ? ' · ' + p.note : ''),
+    transaction: { date: p.date, time: time, amount: p.amount, category: category, account: account, note: p.note }
+  };
+}
+
+var QA_HINTS = {
+  'Food & Dining': ['swiggy', 'zomato', 'lunch', 'dinner', 'breakfast', 'coffee', 'starbucks', 'cafe', 'restaurant', 'pizza', 'burger', 'food', 'tea', 'chai', 'snacks', 'dominos', 'kfc', 'mcd', 'biryani'],
+  'Groceries': ['blinkit', 'zepto', 'bigbasket', 'grocery', 'groceries', 'vegetables', 'fruits', 'milk', 'instamart', 'dmart'],
+  'Shopping': ['amazon', 'flipkart', 'myntra', 'ajio', 'clothes', 'shoes', 'shopping', 'nykaa'],
+  'Transport': ['uber', 'ola', 'rapido', 'metro', 'auto', 'cab', 'petrol', 'diesel', 'fuel', 'bus', 'parking', 'toll'],
+  'Travel': ['flight', 'train', 'irctc', 'hotel', 'airbnb', 'trip', 'makemytrip', 'goibibo'],
+  'Bills & Utilities': ['electricity', 'water', 'gas', 'internet', 'wifi', 'broadband', 'recharge', 'mobile', 'bill', 'jio', 'airtel'],
+  'Rent': ['rent'],
+  'Entertainment': ['movie', 'pvr', 'inox', 'concert', 'game', 'bookmyshow', 'party'],
+  'Subscriptions': ['netflix', 'spotify', 'prime', 'hotstar', 'youtube', 'subscription', 'icloud', 'chatgpt'],
+  'Health': ['medicine', 'pharmacy', 'doctor', 'hospital', 'gym', 'apollo', 'pharmeasy', 'health'],
+  'Personal Care': ['haircut', 'salon', 'spa', 'grooming'],
+  'Education': ['course', 'books', 'book', 'udemy', 'tuition', 'fees'],
+  'Gifts': ['gift', 'donation', 'charity']
+};
+var QA_WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+var QA_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+var QA_MONTH_RE = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+var QA_FILLER = { add: 1, added: 1, spent: 1, spend: 1, paid: 1, pay: 1, bought: 1, 'for': 1, on: 1, at: 1, via: 1, from: 1, by: 1, using: 1, 'with': 1, the: 1, rs: 1, 'rs.': 1, inr: 1, '₹': 1 };
+
+// date helpers on 'yyyy-MM-dd' strings (UTC maths, so no time-zone drift)
+function qaPad_(n) { return (n < 10 ? '0' : '') + n; }
+function qaKey_(y, m, d) { var t = new Date(Date.UTC(y, m, d)); return t.getUTCFullYear() + '-' + qaPad_(t.getUTCMonth() + 1) + '-' + qaPad_(t.getUTCDate()); }
+function qaParts_(k) { var a = k.split('-'); return [Number(a[0]), Number(a[1]) - 1, Number(a[2])]; }
+function qaAddDays_(k, n) { var p = qaParts_(k); return qaKey_(p[0], p[1], p[2] + n); }
+function qaWeekday_(k) { var p = qaParts_(k); return new Date(Date.UTC(p[0], p[1], p[2])).getUTCDay(); }
+function qaRecent_(day, month, year, today) {
+  if (month < 0 || month > 11) return null;
+  var t = qaParts_(today);
+  var y = year === undefined ? t[0] : (year < 100 ? 2000 + year : year);
+  var last = new Date(Date.UTC(y, month + 1, 0)).getUTCDate();
+  if (day < 1 || day > last) return null;
+  var k = qaKey_(y, month, day);
+  if (year === undefined && k > today) k = qaKey_(y - 1, month, day);
+  return k;
+}
+function qaTo24_(h, m, ap) {
+  if (ap) {
+    if (h < 1 || h > 12) return null;
+    if (ap === 'pm' && h !== 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+  }
+  if (h > 23 || m > 59) return null;
+  return qaPad_(h) + ':' + qaPad_(m);
+}
+function qaEval_(expr) {
+  var s = String(expr).replace(/[×x]/g, '*').replace(/÷/g, '/').replace(/,/g, '');
+  if (!/^[0-9+\-*/.()]+$/.test(s)) return NaN;
+  try {
+    var v = Function('"use strict"; return (' + s + ')')(); // only digits and operators reach here
+    return isFinite(v) ? Math.round(v * 100) / 100 : NaN;
+  } catch (e) { return NaN; }
+}
+
+function parseQuick_(input, cats, accs, today) {
+  var explicitNote = '';
+  var body = String(input).trim();
+  var nm = body.match(/(?:^|\s)notes?\s*[:\-–]?\s+(.*)$/i) || body.match(/(?:^|\s)notes?\s*:\s*(.*)$/i);
+  if (nm) { explicitNote = nm[1].trim(); body = body.slice(0, nm.index).trim(); }
+  var s = ' ' + body + ' ';
+  var date = today, time = null;
+
+  var take = function (re, fn) {
+    var m = s.match(re);
+    if (m && fn(m)) { s = s.replace(m[0], ' '); return true; }
+    return false;
+  };
+  var setDate = function (k) { if (!k) return false; date = k; return true; };
+
+  // time
+  take(/\s(?:at\s+|@\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b/i, function (m) { return !!(time = qaTo24_(+m[1], +(m[2] || 0), m[3].toLowerCase())); });
+  if (!time) take(/\s(?:at\s+|@\s*)?([01]?\d|2[0-3]):([0-5]\d)(?=\s)/i, function (m) { return !!(time = qaTo24_(+m[1], +m[2])); });
+  if (!time) take(/\s(?:at\s+|@\s*)(\d{1,2})(?=\s)/i, function (m) {
+    var h = +m[1];
+    var evening = /dinner|night|party|drinks|beer|bar|movie|pub|club/i.test(input);
+    return !!(time = qaTo24_((h >= 1 && h <= 7) || (evening && h >= 8 && h <= 11) ? h + 12 : h, 0));
+  });
+  if (!time) {
+    var words = [[/\s(?:this\s+)?morning(?=\s)/i, '09:00'], [/\s(?:at\s+)?noon(?=\s)/i, '12:00'], [/\s(?:this\s+)?afternoon(?=\s)/i, '14:00'], [/\s(?:this\s+)?evening(?=\s)/i, '19:00'], [/\stonight(?=\s)/i, '21:00'], [/\s(?:at\s+)?night(?=\s)/i, '21:00'], [/\s(?:at\s+)?midnight(?=\s)/i, '00:00']];
+    for (var w = 0; w < words.length; w++) if (take(words[w][0], function () { time = words[w][1]; return true; })) break;
+  }
+
+  // date
+  take(/\s(?:on\s+)?(?:the\s+)?day\s+before\s+yesterday(?=\s)/i, function () { return setDate(qaAddDays_(today, -2)); }) ||
+  take(/\s(?:on\s+)?(yesterday|yday|ytd)(?=\s)/i, function () { return setDate(qaAddDays_(today, -1)); }) ||
+  take(/\s(?:on\s+)?today(?=\s)/i, function () { return setDate(today); }) ||
+  take(/\s(\d{1,3})\s+days?\s+ago(?=\s)/i, function (m) { return setDate(qaAddDays_(today, -m[1])); }) ||
+  take(/\s(?:a\s+|1\s+)?week\s+ago(?=\s)/i, function () { return setDate(qaAddDays_(today, -7)); }) ||
+  take(/\slast\s+week(?=\s)/i, function () { return setDate(qaAddDays_(today, -7)); }) ||
+  take(new RegExp('\\s(?:on\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:of\\s+)?' + QA_MONTH_RE + '\\.?(?:,?\\s+(\\d{2,4}))?(?=\\s)', 'i'), function (m) {
+    return setDate(qaRecent_(+m[1], QA_MONTHS.indexOf(m[2].slice(0, 3).toLowerCase()), m[3] ? +m[3] : undefined, today));
+  }) ||
+  take(new RegExp('\\s(?:on\\s+)?' + QA_MONTH_RE + '\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?(?=\\s)', 'i'), function (m) {
+    return setDate(qaRecent_(+m[2], QA_MONTHS.indexOf(m[1].slice(0, 3).toLowerCase()), m[3] ? +m[3] : undefined, today));
+  }) ||
+  take(/\s(?:on\s+)?(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?(?=\s)/, function (m) { return setDate(qaRecent_(+m[1], +m[2] - 1, m[3] ? +m[3] : undefined, today)); }) ||
+  take(/\s(?:on\s+)?(\d{1,2})\.(\d{1,2})\.(\d{2,4})(?=\s)/, function (m) { return setDate(qaRecent_(+m[1], +m[2] - 1, +m[3], today)); }) ||
+  take(/\s(\d{4})-(\d{1,2})-(\d{1,2})(?=\s)/, function (m) { return setDate(qaRecent_(+m[3], +m[2] - 1, +m[1], today)); }) ||
+  take(/\s(?:on\s+)?(last\s+)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|urday|sday)?(?=\s)/i, function (m) {
+    var key = m[2].toLowerCase().slice(0, 3), wi = -1;
+    QA_WEEKDAYS.forEach(function (d, i) { if (d.indexOf(key) === 0) wi = i; });
+    if (wi < 0) return false;
+    var diff = (qaWeekday_(today) - wi + 7) % 7 || 7;
+    return setDate(qaAddDays_(today, -diff));
+  }) ||
+  take(/\s(?:on\s+)?(?:the\s+)?(\d{1,2})(st|nd|rd|th)(?=\s)/i, function (m) {
+    var t = qaParts_(today);
+    var k = qaRecent_(+m[1], t[1], t[0], today);
+    if (k && k > today) { var pm = qaParts_(qaKey_(t[0], t[1] - 1, 1)); k = qaRecent_(+m[1], pm[1], pm[0], today); }
+    return setDate(k);
+  });
+
+  // amount
+  var toks = s.trim().split(/\s+/).filter(String);
+  var amount = null;
+  var idx = -1;
+  for (var i = 0; i < toks.length && idx < 0; i++) if (/^(₹|rs\.?|inr)\s*\d/i.test(toks[i]) || /\d(₹|\/-|rs)$/i.test(toks[i])) idx = i;
+  for (var j = 0; j < toks.length && idx < 0; j++) if (/^[\d.,+\-*/x×()]+$/i.test(toks[j]) && /\d/.test(toks[j]) && qaEval_(toks[j].replace(/^(₹|rs\.?|inr)/i, '').replace(/(₹|rs\.?|\/-)$/i, '')) > 0) idx = j;
+  if (idx >= 0) {
+    var v = qaEval_(toks[idx].replace(/^(₹|rs\.?|inr)/i, '').replace(/(₹|rs\.?|\/-)$/i, ''));
+    if (v > 0) { amount = v; toks.splice(idx, 1); }
+  }
+  toks = toks.filter(function (t) { return !/^(₹|rs\.?|inr|\/-)$/i.test(t); });
+
+  var lower = function (x) { return String(x).toLowerCase(); };
+  var account = null, category = null;
+
+  // account: full multi-word name first, then first word or type
+  var joined = ' ' + lower(toks.join(' ')) + ' ';
+  var sorted = accs.slice().sort(function (a, b) { return b.name.length - a.name.length; });
+  for (var a = 0; a < sorted.length && !account; a++) {
+    if (joined.indexOf(' ' + lower(sorted[a].name) + ' ') >= 0) {
+      account = sorted[a].name;
+      var n = sorted[a].name.split(/\s+/).length;
+      for (var k = 0; k + n <= toks.length; k++) if (lower(toks.slice(k, k + n).join(' ')) === lower(account)) { toks.splice(k, n); break; }
+    }
+  }
+  for (var b = 0; b < toks.length && !account; b++) {
+    var w0 = lower(toks[b]);
+    for (var c = 0; c < accs.length; c++) {
+      if (lower(accs[c].name).split(/\s+/)[0] === w0 || lower(accs[c].type) === w0) { account = accs[c].name; toks.splice(b, 1); break; }
+    }
+  }
+
+  // category: explicit name first, then keyword hints (also looking at the note)
+  for (var d = 0; d < toks.length && !category; d++) {
+    var w1 = lower(toks[d]).replace(/^#/, '');
+    for (var e = 0; e < cats.length; e++) {
+      var cn = lower(cats[e].name);
+      if (cn === w1 || cn.split(/[\s&]+/)[0] === w1) { category = cats[e].name; toks.splice(d, 1); break; }
+    }
+  }
+  if (!category) {
+    var all = lower(toks.join(' ') + ' ' + explicitNote);
+    for (var cat in QA_HINTS) {
+      if (category) break;
+      var exists = cats.filter(function (x) { return lower(x.name) === lower(cat); })[0];
+      if (!exists) continue;
+      for (var h = 0; h < QA_HINTS[cat].length; h++) {
+        if (new RegExp('\\b' + QA_HINTS[cat][h] + '\\b').test(all)) { category = exists.name; break; }
+      }
+    }
+  }
+
+  var cap = function (x) { return x.charAt(0).toUpperCase() + x.slice(1); };
+  var rest = cap(toks.filter(function (t) { return !QA_FILLER[lower(t)]; }).join(' '));
+  var note = explicitNote ? (rest ? rest + ' · ' + explicitNote : cap(explicitNote)) : rest;
+  return { amount: amount, category: category, account: account, date: date, time: time, note: note };
 }
 
 /* ───────────────────────── utils ───────────────────────── */
