@@ -161,6 +161,9 @@ function SecretRow({ value, label, extra }: { value: string; label: string; extr
   );
 }
 
+// Ready-made Shortcut (no URL inside: each person pastes their own). Override with VITE_SHORTCUT_URL.
+const SHORTCUT_URL = (import.meta.env.VITE_SHORTCUT_URL as string | undefined) || 'https://www.icloud.com/shortcuts/74481c03a9b9444988ad82ed28902f0a';
+
 /**
  * Optional: lets iPhone users add expenses by double-tapping the back of the phone.
  * Collapsed by default so it stays out of the way for everyone who doesn't use it.
@@ -197,28 +200,30 @@ function BackTapCard({ url, api }: { url: string; api: number }) {
                 </p>
                 {!ready && (
                   <div className="small" style={{ background: 'var(--warn-soft)', borderRadius: 12, padding: '10px 12px' }}>
-                    <b>First, update your sheet&rsquo;s script.</b> Copy the latest script, paste it over the old one in <b>Extensions › Apps Script</b>, then <b>Deploy › Manage deployments › Edit (pencil) › Version: New version › Deploy</b>. Your URL stays the same.
+                    <b>Your sheet runs an older script.</b> Copy the latest one, paste it over the old one in <b>Extensions › Apps Script</b>, then <b>Deploy › Manage deployments › Edit (pencil) › Version: New version › Deploy</b>. Your URL stays the same.
                     <div><button className="btn sm" style={{ marginTop: 8 }} onClick={copyScript}><Copy size={14} /> Copy latest script</button></div>
                   </div>
                 )}
                 <ol className="steps">
-                  <li><div>Open the <b>Shortcuts</b> app, tap <b>+</b>, and name it <b>Add expense</b>.</div></li>
-                  <li><div>Add <b>Ask for Input</b>. Prompt: <span className="code">What did you spend?</span>, type: Text.</div></li>
                   <li>
                     <div className="stack" style={{ gap: 8, minWidth: 0, flex: 1 }}>
-                      <div>Add <b>Get Contents of URL</b> and paste your web app URL:</div>
+                      <div>Copy your web app URL:</div>
                       <SecretRow value={url} label="web app URL" />
-                      <div>Tap the arrow on it: <b>Method</b> POST, <b>Request Body</b> JSON, then add three Text fields:</div>
-                      <div className="code small" style={{ padding: '8px 10px', lineHeight: 1.7 }}>
-                        action → quick<br />text → <i>Provided Input</i> (pick the variable)<br />format → text
-                      </div>
                     </div>
                   </li>
-                  <li><div>Add <b>Show Notification</b> and set its text to <b>Contents of URL</b>.</div></li>
-                  <li><div>On the phone: <b>Settings › Accessibility › Touch › Back Tap › Double Tap</b> › choose <b>Add expense</b>.</div></li>
+                  <li>
+                    <div className="stack" style={{ gap: 8, minWidth: 0, flex: 1 }}>
+                      <div>Add the ready-made shortcut on your iPhone:</div>
+                      <a className="btn primary" href={SHORTCUT_URL} target="_blank" rel="noreferrer" style={{ alignSelf: 'flex-start' }}>
+                        <ExternalLink size={15} /> Get “Add Expense” shortcut
+                      </a>
+                    </div>
+                  </li>
+                  <li><div>In the Shortcuts app, open <b>Add Expense</b>, tap the empty URL in <b>Get contents of</b>, and paste your URL. Tap Done.</div></li>
+                  <li><div><b>Settings › Accessibility › Touch › Back Tap › Double Tap</b> › choose <b>Add Expense</b>.</div></li>
                 </ol>
                 <p className="tiny faint" style={{ margin: 0 }}>
-                  {ready ? 'Your sheet is ready for this. ' : ''}You&rsquo;ll see a notification like “✓ Added ₹340 · Food & Dining · UPI”, and the expense shows up in the app within a few seconds. Expenses without an account go to your default account.
+                  The shortcut has no URL inside it, so it&rsquo;s safe to share. Expenses without an account go to your default account and show up in the app within a few seconds.
                 </p>
               </div>
             </motion.div>

@@ -68,9 +68,16 @@ Each person's data stays in their own Drive. Nobody else's script can read it.
 
 ## Optional: add expenses with iPhone Back Tap
 
-Double-tap the back of the phone, type or dictate something like `swiggy 340 upi note team dinner`, and it's saved straight to the sheet without opening the app. Setup steps are in **Settings › Shortcuts › Add with iPhone Back Tap** inside the app. This needs script version 2 or later (the `quick` action), so sheets set up earlier must paste the latest `Code.gs` and choose **Deploy › Manage deployments › Edit › New version**.
+Double-tap the back of the phone, type or dictate something like `swiggy 340 upi note team dinner`, and it's saved straight to the sheet without opening the app. Nobody has to use it: it sits in a collapsed card under **Settings › Shortcuts**.
 
-The script takes `POST {"action":"quick","text":"…","format":"text"}` and replies with one line such as `✓ Added ₹340 · Food & Dining · UPI`. Parsing works the same as in-app quick add (`app/src/lib/quickadd.ts`, mirrored by `parseQuick_` in `Code.gs`).
+1. Copy your web app URL (Settings has a Copy button).
+2. Add the ready-made shortcut: <https://www.icloud.com/shortcuts/74481c03a9b9444988ad82ed28902f0a>. It has no URL inside, so it's safe to share.
+3. In Shortcuts, open **Add Expense** and paste your URL into **Get contents of**.
+4. Go to **Settings › Accessibility › Touch › Back Tap › Double Tap › Add Expense**.
+
+The shipped `Code.gs` (version 2) already supports this, so new sheets need nothing extra. Sheets set up before it must paste the latest `Code.gs` and choose **Deploy › Manage deployments › Edit › New version**; the app points this out when it finds an older script. Adding the feature changes nothing for people who don't use it.
+
+The script accepts `POST {"action":"quick","text":"…"}` and replies with `{ ok, message }` (or `{ ok: false, error }`). Add `"format":"text"` to get just the one-line message. Parsing works the same as in-app quick add (`app/src/lib/quickadd.ts`, mirrored by `parseQuick_` in `Code.gs`).
 
 ## Privacy note
 

@@ -217,7 +217,7 @@ input:focus, input:focus-visible, select:focus-visible, textarea:focus-visible {
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 18px;
   border-radius: 999px; font-weight: 600; background: var(--fill); transition: transform 0.1s ease-out, background 0.15s, opacity 0.15s;
-  white-space: nowrap;
+  white-space: nowrap; text-decoration: none;
 }
 .btn:active { transform: scale(0.97); }
 .btn:disabled { opacity: 0.45; pointer-events: none; }
